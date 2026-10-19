@@ -46,13 +46,13 @@ export const generateCloudflareIceServer = async (
     ttl?: number;
     fetchImpl?: typeof fetch;
   } = {},
-): Promise<IceServer> => {
+): Promise<IceServer[]> => {
   if (!keyId || !token) {
     throw new Error("CLOUDFLARE_TURN_ID and CLOUDFLARE_TURN_TOKEN must be set");
   }
 
   const resp = await fetchImpl(
-    `https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate`,
+    `https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`,
     {
       method: "POST",
       headers: {
@@ -67,16 +67,17 @@ export const generateCloudflareIceServer = async (
     throw new Error(`Cloudflare TURN credential request failed: ${resp.status}`);
   }
 
-  const data = (await resp.json()) as { iceServers?: IceServer };
-  const server = data.iceServers;
-  if (!server?.urls) {
+  const data = (await resp.json()) as { iceServers?: IceServer[] };
+  if (!Array.isArray(data.iceServers)) {
     throw new Error("No ice servers returned");
   }
 
-  const urls = filterTurnUrls(server.urls);
-  if (urls.length === 0) {
-    throw new Error("No usable TURN URLs returned");
+  const servers = data.iceServers
+    .map(server => ({ ...server, urls: filterTurnUrls(server.urls) }))
+    .filter(server => server.urls.length > 0);
+  if (!servers.some(server => server.username && server.credential)) {
+    throw new Error("No usable TURN server returned");
   }
 
-  return { ...server, urls };
+  return servers;
 };

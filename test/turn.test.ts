@@ -45,7 +45,10 @@ describe("generateCloudflareIceServer", () => {
     const fetchImpl = vi.fn(async () =>
       new Response(
         JSON.stringify({
-          iceServers: { urls: CF_URLS, username: "u", credential: "c" },
+          iceServers: [
+            { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.cloudflare.com:53"] },
+            { urls: CF_URLS.slice(2), username: "u", credential: "c" },
+          ],
         }),
         { status: 201 },
       ),
@@ -59,12 +62,13 @@ describe("generateCloudflareIceServer", () => {
     });
 
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("https://rtc.live.cloudflare.com/v1/turn/keys/key/credentials/generate");
+    expect(url).toBe("https://rtc.live.cloudflare.com/v1/turn/keys/key/credentials/generate-ice-servers");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok");
     expect(JSON.parse(init.body as string)).toEqual({ ttl: 7200, customIdentifier: "42" });
-    expect(server.username).toBe("u");
-    expect(server.urls).toContain("turns:turn.cloudflare.com:443?transport=tcp");
-    expect(server.urls).not.toContain("turn:turn.cloudflare.com:53?transport=udp");
+    expect(server).toHaveLength(2);
+    expect(server[1].username).toBe("u");
+    expect(server[1].urls).toContain("turns:turn.cloudflare.com:443?transport=tcp");
+    expect(server[1].urls).not.toContain("turn:turn.cloudflare.com:53?transport=udp");
   });
 
   it("fails clearly without credentials or on an upstream error", async () => {

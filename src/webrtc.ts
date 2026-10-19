@@ -114,7 +114,7 @@ export const CreateIceCredentials = async (
 
   const iceServers = await generateCloudflareIceServer(user.id.toString());
 
-  // The UI expects a single RTCIceServer object here and wraps it in an array.
+  // The UI accepts either the legacy object or Cloudflare's array of RTCIceServers.
   return res.json({ iceServers });
 };
 
