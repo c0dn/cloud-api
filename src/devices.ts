@@ -29,25 +29,19 @@ function liveDeviceState(id: string) {
 
 export const List = async (req: express.Request, res: express.Response) => {
   const idToken = req.session?.id_token;
-  const { iss, sub } = jose.decodeJwt(idToken);
+  const { sub } = jose.decodeJwt(idToken);
 
-  // Authorization server’s identifier for the user
-  const isGoogle = iss === "https://accounts.google.com";
-  if (isGoogle) {
-    const devices = await prisma.device.findMany({
-      where: { user: { googleId: sub } },
-      select: { id: true, name: true, lastSeen: true },
-    });
+  const devices = await prisma.device.findMany({
+    where: { user: { googleId: sub } },
+    select: { id: true, name: true, lastSeen: true },
+  });
 
-    return res.json({
-      devices: devices.map(device => ({
-        ...device,
-        ...liveDeviceState(device.id),
-      })),
-    });
-  } else {
-    throw new BadRequestError("Token is not from Google");
-  }
+  return res.json({
+    devices: devices.map(device => ({
+      ...device,
+      ...liveDeviceState(device.id),
+    })),
+  });
 };
 
 export const Retrieve = async (
