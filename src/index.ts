@@ -235,4 +235,9 @@ const server = app.listen(PORT, () => {
 initializeWebRTCSignaling(server);
 
 // Register new R2 releases at the default rollout, now and every 30 minutes.
-scheduleReleaseSync(releaseSync);
+// Self-hosted deployments without R2 serve no releases, so skip the schedule.
+if (process.env.R2_ENDPOINT && process.env.R2_BUCKET) {
+  scheduleReleaseSync(releaseSync);
+} else {
+  console.log("[sync-releases] R2 not configured; release sync disabled");
+}
