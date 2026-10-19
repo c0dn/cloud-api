@@ -16,9 +16,41 @@ const APP_HOSTNAME = process.env.APP_HOSTNAME;
 const REDIRECT_URI = `${API_HOSTNAME}/oidc/callback`;
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/g;
 
+// Device adoption returns to the KVM's own web UI (e.g. http://192.168.1.50/adopt),
+// which is never on the app origin. Only LAN-style hosts are accepted so a crafted
+// adoption form cannot send the ID token to an arbitrary public site.
+const isLanHost = (hostname: string) => {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (host === "localhost" || host.endsWith(".local")) return true;
+
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return (
+      a === 10 ||
+      a === 127 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254) ||
+      (a === 100 && b >= 64 && b <= 127) // CGNAT / Tailscale
+    );
+  }
+
+  // IPv6 unique-local (fc00::/7), link-local (fe80::/10), loopback
+  return host === "::1" || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
+};
+
+const isDeviceAdoptUrl = (url: URL) =>
+  (url.protocol === "http:" || url.protocol === "https:") &&
+  url.pathname === "/adopt" &&
+  !url.username &&
+  !url.password &&
+  isLanHost(url.hostname);
+
 export const normalizeReturnTo = (
   returnTo: unknown,
   appHostname = APP_HOSTNAME,
+  { allowDeviceAdopt = false }: { allowDeviceAdopt?: boolean } = {},
 ) => {
   const fallback = `${appHostname}/devices`;
   if (typeof returnTo !== "string") return fallback;
@@ -29,8 +61,9 @@ export const normalizeReturnTo = (
   try {
     const url = new URL(sanitized, appHostname);
     const appUrl = new URL(appHostname || "");
-    if (url.origin !== appUrl.origin) return fallback;
-    return url.toString();
+    if (url.origin === appUrl.origin) return url.toString();
+    if (allowDeviceAdopt && isDeviceAdoptUrl(url)) return url.toString();
+    return fallback;
   } catch {
     return fallback;
   }
@@ -45,7 +78,9 @@ export const Login = async (req: express.Request, res: express.Response) => {
   req.session!.csrf = state.get("csrf");
 
   req.session!.deviceId = req.body.deviceId;
-  req.session!.returnTo = normalizeReturnTo(req.body.returnTo);
+  req.session!.returnTo = normalizeReturnTo(req.body.returnTo, APP_HOSTNAME, {
+    allowDeviceAdopt: Boolean(req.body.deviceId),
+  });
 
   const code_verifier = generators.codeVerifier();
   const code_challenge = generators.codeChallenge(code_verifier);
@@ -82,7 +117,9 @@ export const Callback = async (req: express.Request, res: express.Response) => {
   }
 
   const deviceId = req.session?.deviceId as string | undefined;
-  const returnTo = normalizeReturnTo(req.session?.returnTo);
+  const returnTo = normalizeReturnTo(req.session?.returnTo, APP_HOSTNAME, {
+    allowDeviceAdopt: Boolean(deviceId),
+  });
 
   req.session!.csrf = null;
   req.session!.returnTo = null;
