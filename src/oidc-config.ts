@@ -25,7 +25,12 @@ export const getOidcScopes = () =>
 
 export const getOidcIssuer = async () => {
   if (!issuerPromise) {
-    issuerPromise = Issuer.discover(getOidcIssuerUrl());
+    // Don't cache a failed discovery (e.g. IdP briefly unreachable at boot),
+    // or every later login and token check would fail until restart.
+    issuerPromise = Issuer.discover(getOidcIssuerUrl()).catch(error => {
+      issuerPromise = null;
+      throw error;
+    });
   }
   return issuerPromise;
 };
