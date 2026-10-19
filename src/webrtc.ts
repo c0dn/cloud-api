@@ -4,6 +4,7 @@ import * as jose from "jose";
 import { prisma } from "./db";
 import { NotFoundError, UnauthorizedError, UnprocessableEntityError } from "./errors";
 import { activeConnections, iceServers, inFlight } from "./webrtc-signaling";
+import { generateCloudflareIceServer } from "./turn";
 
 export const CreateSession = async (req: express.Request, res: express.Response) => {
   const idToken = req.session?.id_token;
@@ -111,31 +112,10 @@ export const CreateIceCredentials = async (
   });
   if (!user) throw new UnauthorizedError();
 
-  const resp = await fetch(
-    `https://rtc.live.cloudflare.com/v1/turn/keys/${process.env.CLOUDFLARE_TURN_ID}/credentials/generate`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.CLOUDFLARE_TURN_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ttl: 3600, customIdentifier: user.id.toString() }),
-    },
-  );
+  const iceServers = await generateCloudflareIceServer(user.id.toString());
 
-  const data = (await resp.json()) as {
-    iceServers: { credential?: string; urls: string | string[]; username?: string };
-  };
-
-  if (!data.iceServers.urls) {
-    throw new Error("No ice servers returned");
-  }
-
-  if (data.iceServers.urls instanceof Array) {
-    data.iceServers.urls = data.iceServers.urls.filter(url => !url.startsWith("turns"));
-  }
-
-  return res.json(data);
+  // The UI expects a single RTCIceServer object here and wraps it in an array.
+  return res.json({ iceServers });
 };
 
 export const CreateTurnActivity = async (req: express.Request, res: express.Response) => {

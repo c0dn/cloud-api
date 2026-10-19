@@ -36,6 +36,7 @@ declare global {
       // We use Cloudflare STUN & TURN server for cloud users
       CLOUDFLARE_TURN_ID: string;
       CLOUDFLARE_TURN_TOKEN: string;
+      TURN_TTL?: string;
 
       // We use R2 for storing releases
       R2_ENDPOINT: string;
