@@ -157,8 +157,9 @@ async function authenticateDeviceRequest(req: IncomingMessage) {
 // Setup the device WebSocket after authentication
 function setupDeviceWebSocket(deviceWs: WebSocket, device: Device, req: IncomingMessage) {
   const id = device.id;
+  // Node lowercases incoming header names, so match the configured name the same way.
   const ip =
-    (process.env.REAL_IP_HEADER && req.headers[process.env.REAL_IP_HEADER]) ||
+    (process.env.REAL_IP_HEADER && req.headers[process.env.REAL_IP_HEADER.toLowerCase()]) ||
     req.socket.remoteAddress;
 
   const deviceVersion = (req.headers["x-app-version"] as string | undefined) || null;
